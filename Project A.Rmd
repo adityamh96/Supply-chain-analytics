@@ -1,0 +1,431 @@
+---
+title: "Data Analytics INDE 6645-Term Project"
+author: "Bhushan Gorule, Gurukaran Singh Kochar, Saket Surangalikar"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Executive summary
+
+### Internet of things (IoT) takes multiple devices like security cameras, GPS tracking, retail POS machines, etc. and connects them to a cellular network connection. Such connected devices are considered a part of an IoT network when they communicate back and forth with a central hub. In recent years, the rise of the Internet of things (IoT) as an emerging technology has been unbelievable, more companies are moving towards the adoption of these technologies and many IoT devices are being deployed to share information in real-time which leads to the generation of a huge amount of data. This data when used correctly, will be very helpful to the company to discover hidden patterns for better decision making in the future. For example, with the DataCo company, dataset shipment analysis was performed in this project which helps the company to better understand its supply chain and target critical factors to increase customer responsiveness and the company's revenue. 
+
+### In this project we compared 3 popular regressors type machine learning models and measured their performance to find out which machine learning model performs better. Since the dataset used is related to supply chain, important parameters are related to shipment and the machine learning models are trained with the shipment dataset. 
+
+### The machine learning models used in this project are Linear Regression, Random Forest regression, and Gradient Boosting regression to predict number of days for shipment which are compared with mean absolute error (MAE) and root mean square error (RMSE).
+
+
+# 2. Problem statement
+
+### Building a regression model to determine the maximum range of shipping time, by predicting the Fastest and Normal duration for shipping of goods for both Inland and International customers.
+
+
+
+# 3. Data Preprocessing
+
+## 3.a) Defining and collecting data.
+
+
+### The dataset used in this project is maintained transparently with the Creative Commons 4.0 license by Fabian Constante, Fernando Silva, and António Pereira through the Mendeley data repository. The dataset consists of roughly 180k transactions from supply chains used by the company DataCo Global for 3 years. The dataset can be downloaded from:
+
+
+### https://data.mendeley.com/datasets/8gx2fvg2k6/5
+
+
+### Import data set
+
+```{r Get data}
+library(dplyr)
+library(corrplot)
+library(tidyverse)
+library(sf)
+library(maps)
+library(ggplot2)
+library(rpart)
+library(rpart.plot)
+library(data.table)
+data <- read.csv("DataCoSupplyChainDataset.csv")
+#head(data)
+```
+
+### EXPLORATORY DATA ANALYSIS [EDA]
+
+```{r EDA}
+dim(data) # Gives number of rows(180519) and columns(53) in the data set
+datapoints<-ncol(data)*nrow(data) # number of datapoints in the data set
+datapoints
+numeric<-names(data[, sapply(data, is.numeric)])
+length(unique(numeric)) # number of numeric columns
+
+categorical<-names(data[, sapply(data, is.character)])
+length(unique(categorical)) # number of categorical columns
+```
+### The total data set consists of 180519 records and 53 columns. There are total 28 numeric variables and 24 categorical variables.
+
+### Let us now check Missing data
+
+```{r Missing data analysis}
+sum(is.na(data)) # total number of missing values 
+null_values<-lapply(data, function(data) sum(is.na(data))) # It will return the column name along with the missing values
+#null_values
+null_values$Product.Description
+null_values$Customer.Zipcode
+null_values$Order.Zipcode
+total_null_values<-null_values$Product.Description+null_values$Customer.Zipcode+null_values$Order.Zipcode
+print(total_null_values)
+```
+### The data consists of some missing values from Product Description, Order Zipcode and, Customer Zipcode which should be removed or replaced before proceeding with the analysis.
+
+## 3.b) Organizing and Visualizing Variables
+
+## Plotting correlogram 
+
+```{r correlation}
+numeric_data <- select_if(data,is.numeric)
+#numeric_data 
+categorical_data <- select_if(data,is.character)
+#categorical_data 
+correlation <- round(cor(numeric_data),2)
+#correlation
+corrplot(correlation,method = "square",type = "lower")
+```
+
+
+### Correlogram gives us th following information
+
+### Columns that are similar with same values but with different metadata (duplicate columns). 
+
+### -[Benefit per order], Order Profit per order
+### -[Sales per customer], Sales, Order Item Total
+### -[Category ID], Product Category ID, Order Customer ID, Order Item Category ID, Product card ID,
+### -[Order Item Product Price],Product Price
+
+### Unwanted features(null or less correlated values)
+### -Product Description
+### -Product Status
+
+
+## Let us now clean the data set by removing duplicate and redundant columns.
+
+```{r visualization}
+#head(data)
+v_data <- data[,c(1:11,13:15,17,18,20:27,29:34,36:38,41:43,45,49,50,52,53)]
+dim(v_data)
+#head(v_data)
+```
+```{r}
+bar <- ggplot(v_data ,aes(x=Type,fill=Type))
+bar + geom_bar() + theme_classic() + labs(y="Number of transactions", title= "Transaction Records")
+```
+
+
+### The graph shows that highest number of transactions are in the form of Debit and the lowest number of transactions are in the form of cash.
+
+
+```{r}
+total_sales <- v_data%>%
+   group_by(Category.Name) 
+total_sales
+
+total_sales <- total_sales%>%
+ summarize(Sales.per.customer = sum(Sales.per.customer))
+total_sales
+
+total_sales1 <- total_sales %>%
+       arrange(desc(Sales.per.customer))
+top_5<-top_n(total_sales1,5)
+top_5
+```
+
+```{r}
+total_sales <- v_data%>%
+   group_by(Order.Region) 
+total_sales
+
+total_sales <- total_sales%>%
+ summarize(Sales.per.customer = sum(Sales.per.customer))%>%
+ arrange(desc(Sales.per.customer))
+total_sales
+barplot(total_sales$Sales.per.customer,
+main = "Total sales for all regions",
+xlab = "Order region",
+ylab = "Total Sales",
+names.arg = total_sales$Order.Region,total_sales$Sales.per.customer,
+col = "darkred", horiz = F)
+```
+
+
+### It could be seen from the graph that European market has the greatest number of sales whereas Africa has the least. In these markets western Europe regions and central America recorded highest sales. 
+
+```{r}
+total_sales <- v_data%>%
+   group_by(Category.Name) 
+total_sales
+
+total_sales <- total_sales%>%
+ summarize(Product.Price = mean(Product.Price))%>%
+ arrange(desc(Product.Price))
+total_sales
+barplot(total_sales$Product.Price,
+main = "Average price for each category",
+xlab = "Category Name",
+ylab = "Average price",
+names.arg = total_sales$Category.Name,total_sales$Product.Price,
+col = "darkred", horiz = F)
+```
+
+
+```{r}
+top_5 <- c(Fishing=6226935, Cleats=3982857, CampingHiking=3700784, CardioEquipment=3320251, WomensApparel=2828709)
+barplot(top_5,
+        col="dodgerblue3",
+        main="Sales and categories",
+        ylab="Sales per customer",
+        xlab= "Category Name")
+```
+
+
+### As we can see from 'Sales and categories' graph that the fishing category had the greatest number of sales followed by the Cleats. However, it is surprising to see referring to 'Average price for each category' graph that top 7 products with highest price on average are the most sold products on average with computers having almost $1350 sales despite price being $1500.
+
+```{r}
+market <- v_data%>%
+  group_by(Market)
+market
+```
+
+
+```{r}
+library(dplyr)
+market<- market%>%
+ summarize(Sales.per.customer = sum(Sales.per.customer))
+market
+```
+
+```{r}
+market <- market %>% transmute(Market, percent = Sales.per.customer/sum(Sales.per.customer)*100)
+market
+```
+
+```{r}
+library(ggplot2)
+market_share<- ggplot(market, aes(x="", y=percent, fill=Market))+
+geom_bar(width = 1, stat = "identity")
+pie <- market_share + coord_polar("y", start=0)
+pie
+```
+
+
+### Pie chart represents the sales per customer in each market. We can see that Europe and LATAM has majority of sales whereas Africa and USCA has least sales. 
+
+
+```{r}
+customer_segment <- v_data%>%
+  group_by(Market,Customer.Segment)
+
+customer_segment <- customer_segment%>%
+ summarize(Sales.per.customer = sum(Sales.per.customer))
+customer_segment
+
+customer_segment <- customer_segment %>%
+       arrange(desc(Sales.per.customer))
+top_10<-top_n(customer_segment,10)
+top_10
+```
+
+```{r}
+ggplot(top_10, aes(Customer.Segment, Sales.per.customer, fill = Market)) + geom_col(position = "dodge")
+```
+
+
+### The bar graph shows sales per customer based on customer segment for each market. Home office customer segment has least sales in all 5 markets. Consumer customer segment has least sales in all 5 markets.  
+
+
+## Let's divide data set into data frame
+### The data frame is related to shipment, and the columns which are related to shipment are Type, Days for shipping (real), Days for shipment (scheduled), Late delivery risk, Benefit per order, Sales per customer, Latitude, Longitude, Shipping Mode, Order Status, Order Region, Order Country, Order City, Market, Delivery Status.
+
+
+```{r shipment data}
+shipment<- select(data,Type,Late_delivery_risk,Days.for.shipping..real.,Days.for.shipment..scheduled.,Benefit.per.order,Sales.per.customer,Latitude,Longitude,Order.Status,Shipping.Mode,Order.Region,Market,Delivery.Status)
+head(shipment)
+```
+
+
+### Visualize target variables
+
+```{r}
+scatter_plot <- ggplot(shipment, aes(Days.for.shipment..scheduled.,Days.for.shipping..real.))
+scatter_plot + geom_point(aes(color=Late_delivery_risk),shape = 21,fill="white",size= 0.5,stroke= 3) + theme_light() + labs(x="Days for shipment (scheduled)", y="Days for shipment (real)", title = "Target value analysis")
+```
+
+# 4. Model Building
+
+### Data contains 180519 rows, therefore, due to computational expense, we shuffled our data and selected 50,000 rows out of 180519 which are sufficient to run machine learning models.
+
+## To run Linear Regression, all categorical variables in shipment data are converted into numerical values. Following shipment1 vector contains all shipment related data in numerical form.
+
+```{r}
+#install.packages("Metrics")
+shipment1<-read.csv("regressormodeldata1.csv")
+head(shipment1)
+```
+
+## 4.1 Data Partition 
+
+
+### Shipment data has been divided into training and testing data. Training data contains 80% of the total data and remaining 20% data in used for validation. 
+
+
+```{r Data Partition}
+library(magrittr)
+set.seed(1)  
+train.index <- sample(c(1:dim(shipment1)[1]), dim(shipment1)[1]*0.8)  
+train.df <- shipment1[train.index, ]
+dim(train.df)
+valid.df <- shipment1[-train.index, ]
+dim(valid.df)
+head(valid.df)
+head(train.df)
+```
+
+## 4.2 Linear Regression
+
+### The linearity of the model makes the interpretation easy. It is less complicated compared to other machine learning regression models. In this project, the y (dependent) variable is Days for shipping real and rest of the variables are explanatory.
+
+```{r Linear Regression}
+library(Metrics)
+# Build the model
+model <- lm(Days.for.shipping..real.~Type+Late_delivery_risk+Benefit.per.order+Sales.per.customer+Latitude+Longitude+Order.Status+Shipping.Mode+Order.Region+Delivery.Status+Market+Days.for.shipment..scheduled., data = train.df)
+# Summarize the model
+summary(model)$coef
+# Make predictions
+predictions <- model %>% 
+  predict(valid.df)
+# Model performance
+# (a) Prediction error, RMSE
+rmse(predictions, valid.df$Days.for.shipping..real.)
+#plot predicted vs. actual values
+plot(x=predictions, y=valid.df$Days.for.shipping..real.,
+     xlab='Predicted Values',
+     ylab='Actual Values',
+     main='Predicted vs. Actual Values')
+abline(a=0, b=1)
+
+values <- data.frame(actual=valid.df$Days.for.shipping..real., predicted=predictions)
+#values
+round(head(values),2)
+#dim(values)
+#R-square
+RSS_LR <- sum((values$predicted - values$actual) ^ 2)  ## residual sum of squares
+TSS_LR <- sum((values$actual - mean(values$predicted)) ^ 2)  ## total sum of squares
+Rsq_LR <- 1 - RSS_LR/TSS_LR
+Rsq_LR
+
+#Mean absolute error
+MAE_LR<-mae(values$actual,values$predicted)
+MAE_LR
+```
+
+## 4.3 Random Forest regression
+
+
+### The randomForest package optionally produces two additional pieces of information: a measure of the importance of the predictor variables, and a measure of the internal structure of the data (the proximity of different data points to one another). It reduces overfitting in decision trees and helps to improve the accuracy.
+
+
+
+```{r Random Forest regression}
+library(randomForest)
+
+fit <- randomForest(Days.for.shipping..real.~., data=train.df)
+# summarize the fit
+#summary(fit)
+# make predictions
+predictions <- predict(fit, valid.df)
+#predictions
+# summarize accuracy
+rmse(predictions, valid.df$Days.for.shipping..real.)
+
+plot(x=predictions, y=valid.df$Days.for.shipping..real.,
+     xlab='Predicted Values',
+     ylab='Actual Values',
+     main='Predicted vs. Actual Values')
+abline(a=0, b=1)
+
+values <- data.frame(actual=valid.df$Days.for.shipping..real., predicted=predictions)
+round(head(values),2)
+
+#R-square
+RSS_RF <- sum((values$predicted - values$actual) ^ 2)  ## residual sum of squares
+TSS_RF <- sum((values$actual - mean(values$predicted)) ^ 2)  ## total sum of squares
+Rsq_RF <- 1 - RSS_RF/TSS_RF
+Rsq_RF
+
+#Mean absolute error
+MAE_RF<-mae(values$actual,values$predicted)
+MAE_RF
+```
+## 4.4 Gradient Boosting
+
+
+### Gradient Boost is one of the most popular Machine Learning algorithms in use. Gradient boosting starts by making single leaf instead of a tree. This leaf represents an initial guess of days for shipping real of all the samples. This initial guess in nothing but the average value. Then gradient boost builds a tree based on the errors made by the previous tree. Gradient boost continues to build trees in this fashion until it has made the trees we have asked for.
+
+```{r}
+library('caret')
+modfit <- train(Days.for.shipping..real. ~., method = "gbm", data = train.df, verbose = FALSE)
+prediction <- predict(modfit, valid.df)
+
+#error <- prediction/valid.df$Days.for.shipping..real. - 1
+#summary(error)
+#error
+rmse(prediction, valid.df$Days.for.shipping..real.)
+
+plot(x=prediction, y=valid.df$Days.for.shipping..real.,
+     xlab='Predicted Values',
+     ylab='Actual Values',
+     main='Predicted vs. Actual Values')
+abline(a=0, b=1)
+
+values <- data.frame(actual=valid.df$Days.for.shipping..real., predicted=prediction)
+round(head(values),2)
+
+#R-square
+RSS_GB <- sum((values$predicted - values$actual) ^ 2)  ## residual sum of squares
+TSS_GB <- sum((values$actual - mean(values$predicted)) ^ 2)  ## total sum of squares
+Rsq_GB <- 1 - RSS_GB/TSS_GB
+Rsq_GB
+
+#Mean Absolute error
+MAE_GB<-mae(values$actual,values$predicted)
+MAE_GB
+```
+
+# Results
+
+### R-square and error values of all 3 models are shown below
+
+```{r results datatable}
+
+results <- matrix(c(0.66,0.43,0.48,0.83,0.54,0.29,0.35,0.89,0.60,0.36,0.41,0.86),ncol=4,byrow=T)
+colnames(results)<- c("RMSE","MSE","MAE","R-square")
+rownames(results) <- c("Linear regression","Random Forest","Gradient boosting")
+results <- as.table(results)
+results
+```
+
+
+# Conclusion
+
+
+### All 3 regression models give a promising result; however, Random forest regression model has a better result as it have low error values. There are various other regression models that can be run on this dataset which might give a better result, but this is the way forward to predict the delivery shipping time.
+
+
+
+# References
+
+### [1] https://www.youtube.com/watch?v=3CC4N4z3GJc&t=0s
+
+### [2] https://www.r-graph-gallery.com/piechart-ggplot2.html
