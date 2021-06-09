@@ -1,16 +1,3 @@
----
-title: "Data Analytics INDE 6645-Term Project"
-author: "Bhushan Gorule, Gurukaran Singh Kochar, Saket Surangalikar"
-date: "`r format(Sys.time(), '%d %B %Y')`"
-output:
-  html_document: default
-  pdf_document: default
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 # 1. Executive summary
 
 ### Internet of things (IoT) takes multiple devices like security cameras, GPS tracking, retail POS machines, etc. and connects them to a cellular network connection. Such connected devices are considered a part of an IoT network when they communicate back and forth with a central hub. In recent years, the rise of the Internet of things (IoT) as an emerging technology has been unbelievable, more companies are moving towards the adoption of these technologies and many IoT devices are being deployed to share information in real-time which leads to the generation of a huge amount of data. This data when used correctly, will be very helpful to the company to discover hidden patterns for better decision making in the future. For example, with the DataCo company, dataset shipment analysis was performed in this project which helps the company to better understand its supply chain and target critical factors to increase customer responsiveness and the company's revenue. 
@@ -421,11 +408,3 @@ results
 
 
 ### All 3 regression models give a promising result; however, Random forest regression model has a better result as it have low error values. There are various other regression models that can be run on this dataset which might give a better result, but this is the way forward to predict the delivery shipping time.
-
-
-
-# References
-
-### [1] https://www.youtube.com/watch?v=3CC4N4z3GJc&t=0s
-
-### [2] https://www.r-graph-gallery.com/piechart-ggplot2.html
